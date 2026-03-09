@@ -1,518 +1,340 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
-  IoArrowBack,
-  IoCall,
-  IoMail,
-  IoLocation,
-  IoCalendar,
-  IoCheckmarkCircle,
-  IoClose,
-  IoReceipt,
+  IoArrowBack, IoCall, IoMail, IoLocationOutline, IoCalendarOutline,
+  IoCheckmarkCircle, IoCloseOutline, IoReceiptOutline, IoChatbubbleOutline,
+  IoWarningOutline, IoStarOutline,
 } from 'react-icons/io5'
-import Card from '../../components/common/Card'
-import Badge from '../../components/common/Badge'
-import Button from '../../components/common/Button'
-import Avatar from '../../components/common/Avatar'
 import Loader from '../../components/common/Loader'
-import Modal from '../../components/common/Modal'
 import OrderTracking from '../../components/buyer/OrderTracking'
 import orderService from '../../api/services/orderService'
 import { formatCurrency, formatDate } from '../../utils/formatters'
 import toast from 'react-hot-toast'
+
+const F = "'Sora', system-ui, sans-serif"
+
+const statusConfig = {
+  pending:              { label:'Pending',           bg:'#fef9c3', color:'#854d0e' },
+  accepted:             { label:'Accepted',           bg:'#dbeafe', color:'#1e40af' },
+  payment_pending:      { label:'Payment Required',   bg:'#fff7ed', color:'#c2410c' },
+  payment_confirmed:    { label:'Paid',               bg:'#dcfce7', color:'#166534' },
+  ready_for_collection: { label:'Ready for Pickup',   bg:'#dcfce7', color:'#166534' },
+  completed:            { label:'Completed',          bg:'#f3e8ff', color:'#6b21a8' },
+  cancelled:            { label:'Cancelled',          bg:'#fee2e2', color:'#991b1b' },
+  disputed:             { label:'Disputed',           bg:'#fee2e2', color:'#991b1b' },
+}
+
+const payConfig = {
+  pending:  { label:'Pending',   bg:'#fef9c3', color:'#854d0e' },
+  held:     { label:'In Escrow', bg:'#dbeafe', color:'#1e40af' },
+  released: { label:'Released',  bg:'#dcfce7', color:'#166534' },
+  failed:   { label:'Failed',    bg:'#fee2e2', color:'#991b1b' },
+}
+
+const card = { background:'#fff', borderRadius:16, border:'1px solid #f0f0f0', boxShadow:'0 2px 10px rgba(0,0,0,.04)', padding:22, marginBottom:16 }
+const rowStyle = { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 0', borderBottom:'1px solid #f5f5f5' }
+const sectionHead = { fontFamily:"'Playfair Display',serif", fontSize:'1rem', fontWeight:700, color:'#111', margin:'0 0 16px', display:'flex', alignItems:'center', gap:8 }
 
 const OrderDetails = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [cancelModal, setCancelModal] = useState({ isOpen: false, reason: '' })
+  const [cancelModal, setCancelModal]   = useState({ open:false, reason:'' })
   const [confirmModal, setConfirmModal] = useState(false)
-  const [reviewModal, setReviewModal] = useState({
-    isOpen: false,
-    rating: 5,
-    review: '',
-  })
+  const [reviewModal, setReviewModal]   = useState({ open:false, rating:5, review:'' })
+  const [cancelling, setCancelling] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
-  useEffect(() => {
-    fetchOrderDetails()
-  }, [id])
+  useEffect(() => { fetchOrder() }, [id])
 
-  const fetchOrderDetails = async () => {
-    try {
-      setLoading(true)
-      const data = await orderService.getOrder(id)
-      setOrder(data.order)
-    } catch (error) {
-      toast.error('Failed to fetch order details')
-      navigate('/buyer/orders')
-    } finally {
-      setLoading(false)
-    }
+  const fetchOrder = async () => {
+    try { setLoading(true); const d = await orderService.getOrder(id); setOrder(d.order) }
+    catch { toast.error('Failed to load order'); navigate('/buyer/orders') }
+    finally { setLoading(false) }
   }
 
-  const handleCancelOrder = async () => {
-    if (!cancelModal.reason) {
-      toast.error('Please provide a reason for cancellation')
-      return
-    }
-
+  const handleCancel = async () => {
+    if (!cancelModal.reason) return toast.error('Please provide a reason')
     try {
+      setCancelling(true)
       await orderService.cancelOrder(id, cancelModal.reason)
-      toast.success('Order cancelled successfully')
-      setCancelModal({ isOpen: false, reason: '' })
-      fetchOrderDetails()
-    } catch (error) {
-      toast.error('Failed to cancel order')
-    }
+      toast.success('Order cancelled')
+      setCancelModal({ open:false, reason:'' })
+      fetchOrder()
+    } catch { toast.error('Failed to cancel order') }
+    finally { setCancelling(false) }
   }
 
   const handleConfirmDelivery = async () => {
     try {
+      setConfirming(true)
       await orderService.confirmDelivery(id)
-      toast.success('Delivery confirmed! Thank you for your purchase.')
+      toast.success('Delivery confirmed! Payment released to farmer.')
       setConfirmModal(false)
-      setReviewModal({ ...reviewModal, isOpen: true })
-      fetchOrderDetails()
-    } catch (error) {
-      toast.error('Failed to confirm delivery')
-    }
+      setReviewModal(r=>({...r, open:true}))
+      fetchOrder()
+    } catch { toast.error('Failed to confirm delivery') }
+    finally { setConfirming(false) }
   }
 
-  const handleSubmitReview = async () => {
+  const handleReview = async () => {
     try {
-      await orderService.confirmDelivery(id, reviewModal.rating, reviewModal.review)
-      toast.success('Review submitted successfully!')
-      setReviewModal({ isOpen: false, rating: 5, review: '' })
-    } catch (error) {
-      toast.error('Failed to submit review')
-    }
+      await orderService.submitReview?.(id, reviewModal.rating, reviewModal.review)
+      toast.success('Review submitted!')
+      setReviewModal({ open:false, rating:5, review:'' })
+    } catch { toast.error('Failed to submit review') }
   }
 
-  if (loading) {
-    return <Loader fullScreen text="Loading order details..." />
-  }
+  if (loading) return <Loader fullScreen text="Loading order…"/>
 
-  const canCancel = ['pending', 'accepted'].includes(order.status)
-  const canPay = order.status === 'payment_pending'
+  const sc  = statusConfig[order.status] || { label:order.status, bg:'#f5f5f5', color:'#525252' }
+  const psc = payConfig[order.paymentStatus] || { label:order.paymentStatus||'Pending', bg:'#f5f5f5', color:'#525252' }
+  const canCancel  = ['pending','accepted'].includes(order.status)
+  const canPay     = order.status === 'payment_pending'
   const canConfirm = order.status === 'ready_for_collection'
 
+  const farmerInitials = order.farmer?.name ? order.farmer.name.trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase() : '?'
+
   return (
-    <div className="page-container max-w-6xl">
-      {/* Header */}
-      <div className="mb-8">
-        <Link
-          to="/buyer/orders"
-          className="inline-flex items-center text-primary-600 hover:text-primary-700 mb-4"
-        >
-          <IoArrowBack className="mr-2" />
-          Back to Orders
+    <div style={{ fontFamily:F }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Playfair+Display:wght@700;900&display=swap');`}</style>
+
+      {/* Back + title */}
+      <div style={{ marginBottom:24 }}>
+        <Link to="/buyer/orders" style={{ display:'inline-flex', alignItems:'center', gap:6, color:'#2563eb', fontWeight:600, fontSize:'.85rem', textDecoration:'none', marginBottom:14 }}>
+          <IoArrowBack size={15}/> Back to Orders
         </Link>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
           <div>
-            <h1 className="section-header">Order #{order.orderNumber}</h1>
-            <p className="text-neutral-600">
-              Placed on {formatDate(order.createdAt)}
-            </p>
+            <h1 style={{ fontFamily:"'Playfair Display',serif", fontSize:'clamp(1.4rem,3vw,1.9rem)', fontWeight:900, color:'#111', margin:'0 0 4px' }}>
+              Order #{order.orderNumber}
+            </h1>
+            <p style={{ color:'#a3a3a3', fontSize:'.85rem', margin:0 }}>Placed on {formatDate(order.createdAt)}</p>
           </div>
-          <Badge variant={getStatusVariant(order.status)} size="lg">
-            {formatOrderStatus(order.status)}
-          </Badge>
+          <span style={{ padding:'5px 14px', borderRadius:'999px', background:sc.bg, color:sc.color, fontSize:'.78rem', fontWeight:700 }}>{sc.label}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Order Tracking */}
-          <Card>
-            <h2 className="text-xl font-semibold text-neutral-900 mb-6">
-              Order Status
-            </h2>
-            <OrderTracking order={order} />
-          </Card>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:16, alignItems:'start' }}>
 
-          {/* Product Details */}
-          <Card>
-            <h2 className="text-xl font-semibold text-neutral-900 mb-4">
-              Product Details
-            </h2>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Rice Variety</span>
-                <span className="font-medium text-neutral-900">
-                  {order.product?.variety}
-                </span>
+        {/* Left */}
+        <div>
+          {/* Tracking */}
+          <div style={card}>
+            <p style={sectionHead}><IoReceiptOutline size={16} color="#2563eb"/>Order Tracking</p>
+            <OrderTracking order={order}/>
+          </div>
+
+          {/* Product */}
+          <div style={card}>
+            <p style={sectionHead}><IoReceiptOutline size={16} color="#2563eb"/>Product Details</p>
+            {[
+              ['Rice Variety', order.product?.variety],
+              ['Bag Size',     `${order.product?.bagSize}kg`],
+              ['Quantity',     `${order.quantity} bags`],
+              ['Price per Bag', formatCurrency(order.pricePerBag)],
+            ].map(([l,v])=>(
+              <div key={l} style={rowStyle}>
+                <span style={{ fontSize:'.85rem', color:'#737373' }}>{l}</span>
+                <span style={{ fontSize:'.88rem', fontWeight:600, color:'#111' }}>{v}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Bag Size</span>
-                <span className="font-medium text-neutral-900">
-                  {order.product?.bagSize}kg
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Quantity</span>
-                <span className="font-medium text-neutral-900">
-                  {order.quantity} bags
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Price per Bag</span>
-                <span className="font-medium text-neutral-900">
-                  {formatCurrency(order.pricePerBag)}
-                </span>
-              </div>
-              <div className="border-t pt-4 flex justify-between">
-                <span className="text-lg font-semibold text-neutral-900">
-                  Total Amount
-                </span>
-                <span className="text-2xl font-bold text-primary-600">
-                  {formatCurrency(order.totalAmount)}
-                </span>
-              </div>
+            ))}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingTop:14, marginTop:4 }}>
+              <span style={{ fontSize:'.95rem', fontWeight:700, color:'#111' }}>Total Amount</span>
+              <span style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.4rem', fontWeight:900, color:'#2563eb' }}>{formatCurrency(order.totalAmount)}</span>
             </div>
-          </Card>
+          </div>
 
-          {/* Pickup Details */}
+          {/* Pickup */}
           {order.pickupLocation && (
-            <Card>
-              <h2 className="text-xl font-semibold text-neutral-900 mb-4">
-                Pickup Details
-              </h2>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <IoLocation className="text-primary-600 mt-1" size={20} />
-                  <div>
-                    <p className="text-sm text-neutral-600">Location</p>
-                    <p className="font-medium text-neutral-900">
-                      {order.pickupLocation}
-                    </p>
-                  </div>
+            <div style={card}>
+              <p style={sectionHead}><IoLocationOutline size={16} color="#2563eb"/>Pickup Details</p>
+              {[
+                { icon:<IoLocationOutline size={17} color="#2563eb"/>, label:'Location', val:order.pickupLocation },
+                order.pickupDate && { icon:<IoCalendarOutline size={17} color="#2563eb"/>, label:'Pickup Date', val:formatDate(order.pickupDate) },
+              ].filter(Boolean).map(item=>(
+                <div key={item.label} style={{ display:'flex', gap:12, marginBottom:12 }}>
+                  <div style={{ width:36, height:36, borderRadius:9, background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{item.icon}</div>
+                  <div><p style={{ margin:'0 0 2px', fontSize:'.72rem', color:'#a3a3a3', fontWeight:600, textTransform:'uppercase', letterSpacing:'.05em' }}>{item.label}</p><p style={{ margin:0, fontWeight:600, fontSize:'.9rem', color:'#111' }}>{item.val}</p></div>
                 </div>
-                {order.pickupDate && (
-                  <div className="flex items-start gap-3">
-                    <IoCalendar className="text-primary-600 mt-1" size={20} />
-                    <div>
-                      <p className="text-sm text-neutral-600">Pickup Date</p>
-                      <p className="font-medium text-neutral-900">
-                        {formatDate(order.pickupDate)}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
+              ))}
+            </div>
           )}
 
-          {/* Order Notes */}
           {order.notes && (
-            <Card>
-              <h2 className="text-xl font-semibold text-neutral-900 mb-4">
-                Your Notes
-              </h2>
-              <p className="text-neutral-700">{order.notes}</p>
-            </Card>
+            <div style={card}>
+              <p style={sectionHead}><IoReceiptOutline size={16} color="#2563eb"/>Your Notes</p>
+              <p style={{ fontSize:'.88rem', color:'#525252', lineHeight:1.7, margin:0 }}>{order.notes}</p>
+            </div>
           )}
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Farmer Information */}
-          <Card>
-            <h2 className="text-lg font-semibold text-neutral-900 mb-4">
-              Farmer Information
-            </h2>
-            <div className="flex items-center gap-3 mb-4">
-              <Avatar
-                src={order.farmer?.avatar}
-                name={order.farmer?.name}
-                size="lg"
-              />
+        {/* Right */}
+        <div>
+          {/* Farmer */}
+          <div style={card}>
+            <p style={sectionHead}><IoCheckmarkCircle size={16} color="#16a34a"/>Farmer</p>
+            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+              <div style={{ width:44, height:44, borderRadius:12, background:'linear-gradient(135deg,#16a34a,#15803d)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.82rem', fontWeight:700, color:'#fff', flexShrink:0, overflow:'hidden' }}>
+                {order.farmer?.avatar ? <img src={order.farmer.avatar} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/> : farmerInitials}
+              </div>
               <div>
-                <p className="font-semibold text-neutral-900">
-                  {order.farmer?.name}
-                </p>
-                {order.farmer?.isVerified && (
-                  <Badge variant="success" size="sm">
-                    Verified
-                  </Badge>
-                )}
+                <p style={{ margin:'0 0 3px', fontWeight:700, fontSize:'.92rem', color:'#111' }}>{order.farmer?.name}</p>
+                {order.farmer?.isVerified && <span style={{ fontSize:'.68rem', fontWeight:700, color:'#166534', background:'#dcfce7', padding:'2px 8px', borderRadius:'999px' }}>✓ Verified</span>}
               </div>
             </div>
-
-            <div className="space-y-3">
-              <a
-                href={`tel:${order.farmer?.phone}`}
-                className="flex items-center gap-3 p-3 bg-neutral-50 rounded-lg hover:bg-neutral-100 transition-colors"
-              >
-                <IoCall className="text-primary-600" size={20} />
-                <div>
-                  <p className="text-xs text-neutral-600">Phone</p>
-                  <p className="font-medium text-neutral-900">
-                    {order.farmer?.phone}
-                  </p>
-                </div>
-              </a>
-
-              {order.farmer?.email && (
-                <a
-                  href={`mailto:${order.farmer?.email}`}
-                  className="flex items-center gap-3 p-3 bg-neutral-50 rounded-lg hover:bg-neutral-100 transition-colors"
-                >
-                  <IoMail className="text-primary-600" size={20} />
-                  <div>
-                    <p className="text-xs text-neutral-600">Email</p>
-                    <p className="font-medium text-neutral-900">
-                      {order.farmer?.email}
-                    </p>
-                  </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {[
+                { href:`tel:${order.farmer?.phone}`, icon:<IoCall size={15} color="#16a34a"/>, lab:'PHONE', val:order.farmer?.phone },
+                order.farmer?.email && { href:`mailto:${order.farmer.email}`, icon:<IoMail size={15} color="#16a34a"/>, lab:'EMAIL', val:order.farmer?.email },
+                { icon:<IoLocationOutline size={15} color="#16a34a"/>, lab:'LOCATION', val:order.farmer?.location },
+              ].filter(Boolean).map(item=>(
+                <a key={item.lab} href={item.href||'#'} onClick={!item.href?e=>e.preventDefault():undefined}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10, background:'#f9fafb', textDecoration:'none', transition:'background .12s' }}
+                  onMouseEnter={e=>e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e=>e.currentTarget.style.background='#f9fafb'}>
+                  {item.icon}
+                  <div><p style={{ margin:'0 0 1px', fontSize:'.65rem', color:'#a3a3a3', fontWeight:700 }}>{item.lab}</p><p style={{ margin:0, fontSize:'.85rem', fontWeight:600, color:'#111' }}>{item.val}</p></div>
                 </a>
-              )}
-
-              <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-lg">
-                <IoLocation className="text-primary-600" size={20} />
-                <div>
-                  <p className="text-xs text-neutral-600">Location</p>
-                  <p className="font-medium text-neutral-900">
-                    {order.farmer?.location}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Actions */}
-          <Card>
-            <h2 className="text-lg font-semibold text-neutral-900 mb-4">
-              Actions
-            </h2>
-            <div className="space-y-3">
-              {canPay && (
-                <Link to={`/buyer/payment/${order._id}`}>
-                  <Button
-                    variant="success"
-                    fullWidth
-                    leftIcon={<IoReceipt />}
-                  >
-                    Make Payment
-                  </Button>
-                </Link>
-              )}
-
-              {canConfirm && (
-                <Button
-                  variant="success"
-                  fullWidth
-                  onClick={() => setConfirmModal(true)}
-                  leftIcon={<IoCheckmarkCircle />}
-                >
-                  Confirm Delivery
-                </Button>
-              )}
-
-              {canCancel && (
-                <Button
-                  variant="danger"
-                  fullWidth
-                  onClick={() => setCancelModal({ isOpen: true, reason: '' })}
-                  leftIcon={<IoClose />}
-                >
-                  Cancel Order
-                </Button>
-              )}
-
-              <Button variant="outline" fullWidth>
-                Message Farmer
-              </Button>
-
-              <Button variant="ghost" fullWidth>
-                Report Issue
-              </Button>
-            </div>
-          </Card>
-
-          {/* Payment Status */}
-          <Card>
-            <h2 className="text-lg font-semibold text-neutral-900 mb-4">
-              Payment Status
-            </h2>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Payment Method</span>
-                <span className="font-medium text-neutral-900">
-                  {order.paymentMethod || 'Pending'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Payment Status</span>
-                <Badge variant={getPaymentStatusVariant(order.paymentStatus)}>
-                  {order.paymentStatus || 'Pending'}
-                </Badge>
-              </div>
-              {order.transactionRef && (
-                <div className="flex justify-between">
-                  <span className="text-neutral-600">Reference</span>
-                  <span className="font-mono text-sm text-neutral-900">
-                    {order.transactionRef}
-                  </span>
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Cancel Order Modal */}
-      <Modal
-        isOpen={cancelModal.isOpen}
-        onClose={() => setCancelModal({ isOpen: false, reason: '' })}
-        title="Cancel Order"
-        footer={
-          <div className="flex gap-3 justify-end">
-            <Button
-              variant="outline"
-              onClick={() => setCancelModal({ isOpen: false, reason: '' })}
-            >
-              Keep Order
-            </Button>
-            <Button variant="danger" onClick={handleCancelOrder}>
-              Cancel Order
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-neutral-700">
-            Are you sure you want to cancel this order?
-          </p>
-          <textarea
-            value={cancelModal.reason}
-            onChange={(e) =>
-              setCancelModal({ ...cancelModal, reason: e.target.value })
-            }
-            placeholder="Please provide a reason for cancellation..."
-            rows="4"
-            className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            required
-          />
-        </div>
-      </Modal>
-
-      {/* Confirm Delivery Modal */}
-      <Modal
-        isOpen={confirmModal}
-        onClose={() => setConfirmModal(false)}
-        title="Confirm Delivery"
-        footer={
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={() => setConfirmModal(false)}>
-              Not Yet
-            </Button>
-            <Button variant="success" onClick={handleConfirmDelivery}>
-              Confirm Delivery
-            </Button>
-          </div>
-        }
-      >
-        <p className="text-neutral-700">
-          Have you received your order in good condition? Confirming delivery will
-          release payment to the farmer.
-        </p>
-      </Modal>
-
-      {/* Review Modal */}
-      <Modal
-        isOpen={reviewModal.isOpen}
-        onClose={() => setReviewModal({ isOpen: false, rating: 5, review: '' })}
-        title="Rate Your Experience"
-        footer={
-          <div className="flex gap-3 justify-end">
-            <Button
-              variant="outline"
-              onClick={() =>
-                setReviewModal({ isOpen: false, rating: 5, review: '' })
-              }
-            >
-              Skip
-            </Button>
-            <Button variant="primary" onClick={handleSubmitReview}>
-              Submit Review
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="label">Rating</label>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  onClick={() =>
-                    setReviewModal({ ...reviewModal, rating: star })
-                  }
-                  className="text-3xl transition-transform hover:scale-110"
-                >
-                  {star <= reviewModal.rating ? '⭐' : '☆'}
-                </button>
               ))}
             </div>
           </div>
 
-          <div>
-            <label className="label">Review (Optional)</label>
-            <textarea
-              value={reviewModal.review}
-              onChange={(e) =>
-                setReviewModal({ ...reviewModal, review: e.target.value })
-              }
-              placeholder="Share your experience with this farmer..."
-              rows="4"
-              className="input"
-            />
+          {/* Actions */}
+          <div style={card}>
+            <p style={sectionHead}><IoCheckmarkCircle size={16} color="#2563eb"/>Actions</p>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {canPay && (
+                <Link to={`/buyer/payment/${order._id}`} style={{ textDecoration:'none' }}>
+                  <button style={{ width:'100%', padding:'11px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#16a34a,#15803d)', color:'#fff', fontWeight:700, fontSize:'.88rem', cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                    <IoReceiptOutline size={15}/> Make Payment
+                  </button>
+                </Link>
+              )}
+              {canConfirm && (
+                <button onClick={()=>setConfirmModal(true)} style={{ width:'100%', padding:'11px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#2563eb,#1d4ed8)', color:'#fff', fontWeight:700, fontSize:'.88rem', cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                  <IoCheckmarkCircle size={15}/> Confirm Delivery
+                </button>
+              )}
+              {canCancel && (
+                <button onClick={()=>setCancelModal({ open:true, reason:'' })} style={{ width:'100%', padding:'11px', borderRadius:10, border:'1.5px solid #fecaca', background:'#fff5f5', color:'#dc2626', fontWeight:600, fontSize:'.88rem', cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                  <IoCloseOutline size={15}/> Cancel Order
+                </button>
+              )}
+              <button style={{ width:'100%', padding:'11px', borderRadius:10, border:'1.5px solid #e5e5e5', background:'#fff', color:'#525252', fontWeight:600, fontSize:'.88rem', cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                <IoChatbubbleOutline size={15}/> Message Farmer
+              </button>
+              <button style={{ width:'100%', padding:'10px', borderRadius:10, border:'none', background:'transparent', color:'#a3a3a3', fontWeight:600, fontSize:'.82rem', cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                <IoWarningOutline size={14}/> Report Issue
+              </button>
+            </div>
+          </div>
+
+          {/* Payment */}
+          <div style={card}>
+            <p style={sectionHead}><IoReceiptOutline size={16} color="#2563eb"/>Payment</p>
+            <div style={rowStyle}>
+              <span style={{ fontSize:'.82rem', color:'#737373' }}>Method</span>
+              <span style={{ fontSize:'.85rem', fontWeight:600, color:'#111' }}>{order.paymentMethod||'—'}</span>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingTop:12 }}>
+              <span style={{ fontSize:'.82rem', color:'#737373' }}>Status</span>
+              <span style={{ padding:'4px 12px', borderRadius:'999px', background:psc.bg, color:psc.color, fontSize:'.72rem', fontWeight:700 }}>{psc.label}</span>
+            </div>
+            {order.transactionRef && (
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingTop:10, borderTop:'1px solid #f5f5f5', marginTop:10 }}>
+                <span style={{ fontSize:'.78rem', color:'#737373' }}>Ref</span>
+                <span style={{ fontFamily:'monospace', fontSize:'.75rem', color:'#111' }}>{order.transactionRef}</span>
+              </div>
+            )}
           </div>
         </div>
-      </Modal>
+      </div>
+
+      {/* ── Modals ── */}
+      {/* Cancel */}
+      {cancelModal.open && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', backdropFilter:'blur(4px)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={()=>setCancelModal({ open:false, reason:'' })}>
+          <div style={{ background:'#fff', borderRadius:18, padding:28, width:'100%', maxWidth:440, boxShadow:'0 20px 60px rgba(0,0,0,.2)', fontFamily:F }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+              <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.05rem', fontWeight:700, color:'#111', margin:0 }}>Cancel Order</h3>
+              <button onClick={()=>setCancelModal({ open:false, reason:'' })} style={{ width:28, height:28, borderRadius:7, border:'none', background:'#f5f5f5', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><IoCloseOutline size={15}/></button>
+            </div>
+            <p style={{ fontSize:'.88rem', color:'#525252', marginBottom:14 }}>Are you sure? Please provide a reason:</p>
+            <textarea value={cancelModal.reason} onChange={e=>setCancelModal(m=>({...m,reason:e.target.value}))} placeholder="Reason for cancellation…" rows={3}
+              style={{ width:'100%', padding:'11px 14px', borderRadius:10, border:'1.5px solid #e5e5e5', fontSize:'.88rem', fontFamily:F, outline:'none', resize:'vertical', boxSizing:'border-box', marginBottom:16 }}
+              onFocus={e=>{e.target.style.borderColor='#2563eb';e.target.style.boxShadow='0 0 0 3px rgba(37,99,235,.1)'}}
+              onBlur={e=>{e.target.style.borderColor='#e5e5e5';e.target.style.boxShadow='none'}}/>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={()=>setCancelModal({ open:false, reason:'' })} style={{ flex:1, padding:'11px', borderRadius:10, border:'1.5px solid #e5e5e5', background:'#fff', color:'#525252', fontWeight:600, fontSize:'.88rem', cursor:'pointer', fontFamily:F }}>Keep Order</button>
+              <button onClick={handleCancel} disabled={cancelling} style={{ flex:1, padding:'11px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#ef4444,#dc2626)', color:'#fff', fontWeight:700, fontSize:'.88rem', cursor:cancelling?'not-allowed':'pointer', fontFamily:F, opacity:cancelling?.6:1 }}>
+                {cancelling?'Cancelling…':'Cancel Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delivery */}
+      {confirmModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', backdropFilter:'blur(4px)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={()=>setConfirmModal(false)}>
+          <div style={{ background:'#fff', borderRadius:18, padding:28, width:'100%', maxWidth:420, boxShadow:'0 20px 60px rgba(0,0,0,.2)', fontFamily:F, textAlign:'center' }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ width:56, height:56, borderRadius:14, background:'linear-gradient(135deg,#f0fdf4,#dcfce7)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
+              <IoCheckmarkCircle size={26} color="#16a34a"/>
+            </div>
+            <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.1rem', fontWeight:700, color:'#111', margin:'0 0 10px' }}>Confirm Delivery?</h3>
+            <p style={{ fontSize:'.88rem', color:'#525252', margin:'0 0 20px', lineHeight:1.6 }}>
+              Have you received your order in good condition? Confirming will release payment to the farmer.
+            </p>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={()=>setConfirmModal(false)} style={{ flex:1, padding:'11px', borderRadius:10, border:'1.5px solid #e5e5e5', background:'#fff', color:'#525252', fontWeight:600, fontSize:'.88rem', cursor:'pointer', fontFamily:F }}>Not Yet</button>
+              <button onClick={handleConfirmDelivery} disabled={confirming} style={{ flex:1, padding:'11px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#16a34a,#15803d)', color:'#fff', fontWeight:700, fontSize:'.88rem', cursor:confirming?'not-allowed':'pointer', fontFamily:F, opacity:confirming?.6:1 }}>
+                {confirming?'Confirming…':'Yes, Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Review */}
+      {reviewModal.open && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', backdropFilter:'blur(4px)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={()=>setReviewModal(r=>({...r,open:false}))}>
+          <div style={{ background:'#fff', borderRadius:18, padding:28, width:'100%', maxWidth:440, boxShadow:'0 20px 60px rgba(0,0,0,.2)', fontFamily:F }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
+              <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.05rem', fontWeight:700, color:'#111', margin:0 }}>Rate Your Experience</h3>
+              <button onClick={()=>setReviewModal(r=>({...r,open:false}))} style={{ width:28, height:28, borderRadius:7, border:'none', background:'#f5f5f5', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><IoCloseOutline size={15}/></button>
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <p style={{ fontSize:'.72rem', fontWeight:700, color:'#a3a3a3', textTransform:'uppercase', letterSpacing:'.06em', margin:'0 0 10px' }}>Rating</p>
+              <div style={{ display:'flex', gap:8 }}>
+                {[1,2,3,4,5].map(s=>(
+                  <button key={s} onClick={()=>setReviewModal(r=>({...r,rating:s}))} style={{ fontSize:'1.8rem', background:'none', border:'none', cursor:'pointer', transition:'transform .1s' }} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.2)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                    {s<=reviewModal.rating ? '⭐' : '☆'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <textarea value={reviewModal.review} onChange={e=>setReviewModal(r=>({...r,review:e.target.value}))} placeholder="Share your experience with this farmer…" rows={3}
+              style={{ width:'100%', padding:'11px 14px', borderRadius:10, border:'1.5px solid #e5e5e5', fontSize:'.88rem', fontFamily:F, outline:'none', resize:'vertical', boxSizing:'border-box', marginBottom:16 }}
+              onFocus={e=>{e.target.style.borderColor='#2563eb';e.target.style.boxShadow='0 0 0 3px rgba(37,99,235,.1)'}}
+              onBlur={e=>{e.target.style.borderColor='#e5e5e5';e.target.style.boxShadow='none'}}/>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={()=>setReviewModal(r=>({...r,open:false}))} style={{ flex:1, padding:'11px', borderRadius:10, border:'1.5px solid #e5e5e5', background:'#fff', color:'#525252', fontWeight:600, fontSize:'.88rem', cursor:'pointer', fontFamily:F }}>Skip</button>
+              <button onClick={handleReview} style={{ flex:1, padding:'11px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#2563eb,#1d4ed8)', color:'#fff', fontWeight:700, fontSize:'.88rem', cursor:'pointer', fontFamily:F, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                <IoStarOutline size={14}/> Submit Review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
-}
-
-const getStatusVariant = (status) => {
-  const variants = {
-    pending: 'warning',
-    accepted: 'info',
-    payment_pending: 'warning',
-    payment_confirmed: 'success',
-    ready_for_collection: 'success',
-    completed: 'success',
-    cancelled: 'danger',
-    disputed: 'danger',
-  }
-  return variants[status] || 'default'
-}
-
-const getPaymentStatusVariant = (status) => {
-  const variants = {
-    pending: 'warning',
-    held: 'info',
-    released: 'success',
-    failed: 'danger',
-  }
-  return variants[status] || 'default'
-}
-
-const formatOrderStatus = (status) => {
-  const statusMap = {
-    pending: 'Pending',
-    accepted: 'Accepted',
-    payment_pending: 'Payment Required',
-    payment_confirmed: 'Payment Confirmed',
-    ready_for_collection: 'Ready for Pickup',
-    completed: 'Completed',
-    cancelled: 'Cancelled',
-    disputed: 'Disputed',
-  }
-  return statusMap[status] || status
 }
 
 export default OrderDetails

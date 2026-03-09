@@ -6,61 +6,40 @@ import Loader from '../../components/common/Loader'
 import productService from '../../api/services/productService'
 import toast from 'react-hot-toast'
 
+const F = "'Sora', system-ui, sans-serif"
+
 const ProductView = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchProduct()
-  }, [id])
+  useEffect(() => { fetchProduct() }, [id])
 
   const fetchProduct = async () => {
-    try {
-      setLoading(true)
-      const data = await productService.getProduct(id)
-      setProduct(data.product)
-    } catch (error) {
-      toast.error('Failed to fetch product')
-      navigate('/buyer/marketplace')
-    } finally {
-      setLoading(false)
-    }
+    try { setLoading(true); const d = await productService.getProduct(id); setProduct(d.product) }
+    catch { toast.error('Failed to load product'); navigate('/buyer/marketplace') }
+    finally { setLoading(false) }
   }
 
-  const handleOrderPlaced = () => {
-    navigate('/buyer/orders')
-  }
-
-  if (loading) {
-    return <Loader fullScreen text="Loading product..." />
-  }
+  if (loading) return <Loader fullScreen text="Loading product…"/>
 
   return (
-    <div className="page-container max-w-6xl">
-      {/* Header */}
-      <div className="mb-8">
-        <Link
-          to="/buyer/marketplace"
-          className="inline-flex items-center text-primary-600 hover:text-primary-700 mb-4"
-        >
-          <IoArrowBack className="mr-2" />
-          Back to Marketplace
+    <div style={{ fontFamily: F }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Playfair+Display:wght@700;900&display=swap');`}</style>
+
+      <div style={{ marginBottom: 20 }}>
+        <Link to="/buyer/marketplace" style={{ display:'inline-flex', alignItems:'center', gap:6, color:'#2563eb', fontWeight:600, fontSize:'.85rem', textDecoration:'none' }}
+          onMouseEnter={e=>e.currentTarget.style.opacity='.75'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+          <IoArrowBack size={15}/> Back to Marketplace
         </Link>
       </div>
 
-      {/* Product Details */}
-      <ProductDetails product={product} onOrderPlaced={handleOrderPlaced} />
+      <ProductDetails product={product} onOrderPlaced={() => navigate('/buyer/orders')} />
 
-      {/* Similar Products */}
-      <div className="mt-12">
-        <h2 className="text-2xl font-bold text-neutral-900 mb-6">
-          Similar Products
-        </h2>
-        <p className="text-neutral-600">
-          More products from this region coming soon...
-        </p>
+      <div style={{ marginTop: 40 }}>
+        <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.3rem', fontWeight:700, color:'#111', margin:'0 0 8px' }}>Similar Products</h2>
+        <p style={{ fontSize:'.85rem', color:'#a3a3a3' }}>More products from this region coming soon…</p>
       </div>
     </div>
   )
