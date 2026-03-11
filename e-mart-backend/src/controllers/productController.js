@@ -5,7 +5,13 @@ const { uploadMultiple } = require('../utils/imageProcessor')
 const getProducts = async (req, res) => {
   try {
     const { search, variety, region, minPrice, maxPrice, page = 1, limit = 12, sort = '-createdAt' } = req.query
-    const query = { status: 'available', quantity: { $gt: 0 } }
+    const query = {
+      status: 'available',
+      $or: [
+        { quantity: { $gt: 0 } },
+        { quantityAvailable: { $gt: 0 } },
+      ],
+    }
     if (search) query.$text = { $search: search }
     if (variety) query.variety = { $regex: variety, $options: 'i' }
     if (region) query.region = { $regex: region, $options: 'i' }
