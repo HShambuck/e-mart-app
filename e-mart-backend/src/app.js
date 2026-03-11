@@ -51,4 +51,6 @@ app.use('/api', routes)
 app.use(notFound)
 app.use(errorHandler)
 
+app.set('trust proxy', 1) // Required for Railway/Heroku proxies
+
 module.exports = app
