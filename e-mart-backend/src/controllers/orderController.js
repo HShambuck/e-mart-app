@@ -6,11 +6,12 @@ const PLATFORM_FEE = 0.05
 
 const placeOrder = async (req, res) => {
   try {
-    const { productId, quantity, paymentMethod, pickupDetails, buyerNotes } = req.body
+    const { product: productId, quantity, pickupLocation, pickupDate, notes } = req.body
+
     const product = await Product.findById(productId)
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' })
     if (product.status !== 'available') return res.status(400).json({ success: false, message: 'Product not available' })
-    if (product.quantityAvailable < quantity) return res.status(400).json({ success: false, message: `Only ${product.quantityAvailable} bags available` })
+    if (product.quantity < quantity) return res.status(400).json({ success: false, message: `Only ${product.quantity} bags available` })
     if (product.farmer.toString() === req.user._id.toString()) return res.status(400).json({ success: false, message: 'Cannot order your own product' })
 
     const totalAmount = product.pricePerBag * quantity
@@ -25,22 +26,24 @@ const placeOrder = async (req, res) => {
       totalAmount,
       platformFee,
       farmerAmount: totalAmount - platformFee,
-      paymentMethod,
-      pickupDetails,
-      buyerNotes,
+      pickupDetails: {
+        location: pickupLocation,
+        date: pickupDate || null,
+        notes: notes || '',
+      },
       statusHistory: [{ status: 'pending', note: 'Order placed' }],
     })
 
     await Notification.create({
       user: product.farmer,
       title: 'New Order!',
-      message: `You received a new order for ${quantity} bag(s) of ${product.name}`,
+      message: `You received a new order for ${quantity} bag(s) of ${product.variety}`,
       type: 'order',
       link: `/farmer/orders/${order._id}`,
     })
 
     const populated = await order.populate([
-      { path: 'product', select: 'name variety images' },
+      { path: 'product', select: 'variety images bagSize' },
       { path: 'buyer', select: 'name phone' },
     ])
 
@@ -56,8 +59,12 @@ const getMyOrders = async (req, res) => {
     const query = { buyer: req.user._id }
     if (status) query.status = status
     const [orders, total] = await Promise.all([
-      Order.find(query).populate('product', 'name variety images bagSize').populate('farmer', 'name phone avatar')
-        .sort({ createdAt: -1 }).limit(limit * 1).skip((page - 1) * limit),
+      Order.find(query)
+        .populate('product', 'variety images bagSize')
+        .populate('farmer', 'name phone avatar')
+        .sort({ createdAt: -1 })
+        .limit(limit * 1)
+        .skip((page - 1) * limit),
       Order.countDocuments(query),
     ])
     res.json({ success: true, orders, total, pages: Math.ceil(total / limit) })
@@ -69,7 +76,7 @@ const getMyOrders = async (req, res) => {
 const getOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate('product', 'name variety images bagSize description')
+      .populate('product', 'variety images bagSize qualityDescription')
       .populate('buyer', 'name phone email avatar')
       .populate('farmer', 'name phone email avatar')
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
@@ -133,4 +140,61 @@ const addReview = async (req, res) => {
   }
 }
 
-module.exports = { placeOrder, getMyOrders, getOrder, cancelOrder, addReview }
+// Farmer updates order status
+const updateOrderStatus = async (req, res) => {
+  try {
+    const { status, note } = req.body
+    const order = await Order.findOne({ _id: req.params.id, farmer: req.user._id })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+
+    const validTransitions = {
+      pending: ['accepted', 'cancelled'],
+      accepted: ['payment_pending', 'cancelled'],
+      payment_confirmed: ['ready_for_collection'],
+      ready_for_collection: ['completed'],
+    }
+
+    if (!validTransitions[order.status]?.includes(status))
+      return res.status(400).json({ success: false, message: `Cannot transition from ${order.status} to ${status}` })
+
+    order.status = status
+    order.statusHistory.push({ status, note: note || '' })
+    if (status === 'completed') order.completedAt = new Date()
+    await order.save()
+
+    await Notification.create({
+      user: order.buyer,
+      title: 'Order Updated',
+      message: `Your order #${order.orderNumber} status changed to ${status}`,
+      type: 'order',
+      link: `/buyer/orders/${order._id}`,
+    })
+
+    res.json({ success: true, message: 'Order status updated', order })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+}
+
+// Farmer gets their orders
+const getFarmerOrders = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10 } = req.query
+    const query = { farmer: req.user._id }
+    if (status) query.status = status
+    const [orders, total] = await Promise.all([
+      Order.find(query)
+        .populate('product', 'variety images bagSize')
+        .populate('buyer', 'name phone avatar')
+        .sort({ createdAt: -1 })
+        .limit(limit * 1)
+        .skip((page - 1) * limit),
+      Order.countDocuments(query),
+    ])
+    res.json({ success: true, orders, total, pages: Math.ceil(total / limit) })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+}
+
+module.exports = { placeOrder, getMyOrders, getOrder, cancelOrder, addReview, updateOrderStatus, getFarmerOrders }

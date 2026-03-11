@@ -4,20 +4,23 @@ const { uploadMultiple } = require('../utils/imageProcessor')
 
 const getProducts = async (req, res) => {
   try {
-    const { search, variety, region, minPrice, maxPrice, quality, page = 1, limit = 12, sort = '-createdAt' } = req.query
-    const query = { status: 'available', quantityAvailable: { $gt: 0 } }
+    const { search, variety, region, minPrice, maxPrice, page = 1, limit = 12, sort = '-createdAt' } = req.query
+    const query = { status: 'available', quantity: { $gt: 0 } }
     if (search) query.$text = { $search: search }
     if (variety) query.variety = { $regex: variety, $options: 'i' }
     if (region) query.region = { $regex: region, $options: 'i' }
-    if (quality) query.quality = quality
     if (minPrice || maxPrice) {
       query.pricePerBag = {}
       if (minPrice) query.pricePerBag.$gte = Number(minPrice)
       if (maxPrice) query.pricePerBag.$lte = Number(maxPrice)
     }
     const [products, total] = await Promise.all([
-      Product.find(query).populate('farmer', 'name avatar').populate('farmerProfile', 'region rating isVerified verificationBadge')
-        .sort(sort).limit(limit * 1).skip((page - 1) * limit),
+      Product.find(query)
+        .populate('farmer', 'name avatar phone')
+        .populate('farmerProfile', 'region rating isVerified')
+        .sort(sort)
+        .limit(limit * 1)
+        .skip((page - 1) * limit),
       Product.countDocuments(query),
     ])
     res.json({ success: true, products, total, pages: Math.ceil(total / limit), page: Number(page) })
@@ -30,7 +33,7 @@ const getProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
       .populate('farmer', 'name avatar phone')
-      .populate('farmerProfile', 'region district farmName rating totalReviews isVerified verificationBadge')
+      .populate('farmerProfile', 'region rating isVerified')
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' })
     await Product.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } })
     res.json({ success: true, product })
@@ -41,13 +44,21 @@ const getProduct = async (req, res) => {
 
 const createProduct = async (req, res) => {
   try {
-    const { name, variety, description, pricePerBag, bagSize, quantityAvailable, quality, harvestDate, region, district, isOrganic, tags } = req.body
+    const {
+      variety, pricePerBag, bagSize, quantity,
+      location, region, harvestDate, qualityDescription, status,
+    } = req.body
+
     const farmerProfile = await Farmer.findOne({ user: req.user._id })
+
     const product = await Product.create({
       farmer: req.user._id,
       farmerProfile: farmerProfile?._id,
-      name, variety, description, pricePerBag, bagSize, quantityAvailable, quality, harvestDate, region, district, isOrganic, tags,
+      variety, pricePerBag, bagSize, quantity,
+      location, region, harvestDate, qualityDescription,
+      status: status || 'available',
     })
+
     res.status(201).json({ success: true, message: 'Product created', product })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
@@ -58,9 +69,14 @@ const updateProduct = async (req, res) => {
   try {
     const product = await Product.findOne({ _id: req.params.id, farmer: req.user._id })
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' })
-    const fields = ['name', 'variety', 'description', 'pricePerBag', 'bagSize', 'quantityAvailable', 'quality', 'harvestDate', 'region', 'district', 'isOrganic', 'tags', 'status']
+
+    const fields = [
+      'variety', 'pricePerBag', 'bagSize', 'quantity',
+      'location', 'region', 'harvestDate', 'qualityDescription', 'status',
+    ]
     fields.forEach(f => { if (req.body[f] !== undefined) product[f] = req.body[f] })
     await product.save()
+
     res.json({ success: true, message: 'Product updated', product })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
