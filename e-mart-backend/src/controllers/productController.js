@@ -1,6 +1,7 @@
 const Product = require('../models/Product')
 const Farmer = require('../models/Farmer')
 const { uploadMultiple } = require('../utils/imageProcessor')
+const logger = require('../utils/logger')
 
 const getProducts = async (req, res) => {
   try {
@@ -75,14 +76,9 @@ const updateProduct = async (req, res) => {
   try {
     const product = await Product.findOne({ _id: req.params.id, farmer: req.user._id })
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' })
-
-    const fields = [
-      'variety', 'pricePerBag', 'bagSize', 'quantity',
-      'location', 'region', 'harvestDate', 'qualityDescription', 'status',
-    ]
+    const fields = ['variety', 'pricePerBag', 'bagSize', 'quantity', 'location', 'region', 'harvestDate', 'qualityDescription', 'status']
     fields.forEach(f => { if (req.body[f] !== undefined) product[f] = req.body[f] })
     await product.save()
-
     res.json({ success: true, message: 'Product updated', product })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
@@ -116,14 +112,26 @@ const getMyProducts = async (req, res) => {
 
 const uploadImages = async (req, res) => {
   try {
+    logger.info(`uploadImages — files received: ${req.files?.length ?? 0}`)
+    logger.info(`uploadImages — content-type: ${req.headers['content-type']}`)
+
     const product = await Product.findOne({ _id: req.params.id, farmer: req.user._id })
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' })
-    if (!req.files?.length) return res.status(400).json({ success: false, message: 'No images provided' })
+
+    if (!req.files?.length) {
+      logger.warn('uploadImages — no files found in req.files')
+      return res.status(400).json({ success: false, message: 'No images provided' })
+    }
+
     const urls = await uploadMultiple(req.files, 'emart/products')
+    logger.info(`uploadImages — Cloudinary URLs: ${JSON.stringify(urls)}`)
+
     product.images = [...product.images, ...urls]
     await product.save()
+
     res.json({ success: true, message: 'Images uploaded', images: product.images })
   } catch (err) {
+    logger.error(`uploadImages error: ${err.message}`)
     res.status(500).json({ success: false, message: err.message })
   }
 }
