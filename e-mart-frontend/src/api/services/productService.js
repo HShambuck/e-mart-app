@@ -6,6 +6,11 @@ const productService = {
     const res = await api.get(ENDPOINTS.PRODUCTS.BASE, { params })
     return res.data
   },
+  // alias used by MarketplaceBrowse
+  getAllProducts: async (params = {}) => {
+    const res = await api.get(ENDPOINTS.PRODUCTS.BASE, { params })
+    return res.data
+  },
   getProduct: async (id) => {
     const res = await api.get(ENDPOINTS.PRODUCTS.BY_ID(id))
     return res.data

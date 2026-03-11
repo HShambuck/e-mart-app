@@ -60,11 +60,12 @@ const MyProducts = () => {
   }
 
   const handleDelete = async () => {
+    const idToDelete = deleteModal.productId
+    setDeleteModal({ isOpen: false, productId: null })
     try {
-      await productService.deleteProduct(deleteModal.productId)
+      await productService.deleteProduct(idToDelete)
+      setProducts(prev => prev.filter(p => p._id !== idToDelete))
       toast.success('Product deleted successfully')
-      setProducts(products.filter((p) => p._id !== deleteModal.productId))
-      setDeleteModal({ isOpen: false, productId: null })
     } catch (error) {
       toast.error('Failed to delete product')
     }
