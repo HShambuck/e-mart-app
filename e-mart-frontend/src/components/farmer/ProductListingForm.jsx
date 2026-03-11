@@ -64,11 +64,11 @@ const ProductListingForm = ({ initialData = null, isEdit = false }) => {
 
   const validate = (values) => {
     const errors = {}
-    if (!values.variety)                        errors.variety      = 'Rice variety is required'
+    if (!values.variety)                                errors.variety     = 'Rice variety is required'
     if (!values.pricePerBag || values.pricePerBag <= 0) errors.pricePerBag = 'Valid price is required'
     if (!values.quantity    || values.quantity  <= 0)   errors.quantity    = 'Valid quantity is required'
-    if (!values.bagSize)                        errors.bagSize      = 'Bag size is required'
-    if (!values.location)                       errors.location     = 'Location is required'
+    if (!values.bagSize)                                errors.bagSize     = 'Bag size is required'
+    if (!values.location)                               errors.location    = 'Location is required'
     return errors
   }
 
@@ -90,8 +90,18 @@ const ProductListingForm = ({ initialData = null, isEdit = false }) => {
         response = await productService.createProduct(formValues)
         toast.success('Product listed!')
       }
-      if (images.length > 0)
-        await productService.uploadProductImages(response.product._id, images)
+
+      // Only upload images that are actual new File objects (not existing URL strings)
+      const newImages = images.filter(img => img instanceof File)
+      if (newImages.length > 0) {
+        try {
+          await productService.uploadImages(response.product._id, newImages)
+        } catch {
+          // Image upload failure is non-critical — product was saved, just warn
+          toast.error("Product saved but images couldn't be uploaded")
+        }
+      }
+
       navigate('/farmer/products')
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to save product')
@@ -233,7 +243,10 @@ const ProductListingForm = ({ initialData = null, isEdit = false }) => {
 
         {/* ── Section: Images ── */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f0f0f0', boxShadow: '0 2px 10px rgba(0,0,0,.04)', padding: 22 }}>
-          <p style={sectionHead}><IoImageOutline size={16} color="#16a34a" /> Product Images <span style={{ fontSize: '.75rem', fontWeight: 400, color: '#a3a3a3', fontFamily: F }}>(optional)</span></p>
+          <p style={sectionHead}>
+            <IoImageOutline size={16} color="#16a34a" /> Product Images
+            <span style={{ fontSize: '.75rem', fontWeight: 400, color: '#a3a3a3', fontFamily: F }}>(optional)</span>
+          </p>
           <ImageUpload
             value={images[0]}
             onChange={(file) => setImages([file])}
@@ -267,6 +280,7 @@ const ProductListingForm = ({ initialData = null, isEdit = false }) => {
             <IoCloseOutline size={16} /> Cancel
           </button>
         </div>
+
       </form>
     </div>
   )

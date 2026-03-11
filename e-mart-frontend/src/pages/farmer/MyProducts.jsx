@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { IoAdd, IoSearch, IoFilter } from 'react-icons/io5'
+import { IoAdd } from 'react-icons/io5'
 import ProductCard from '../../components/farmer/ProductCard'
 import Button from '../../components/common/Button'
 import SearchBar from '../../components/common/SearchBar'
@@ -31,7 +31,7 @@ const MyProducts = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true)
-      const data = await productService.getFarmerProducts()
+      const data = await productService.getMyProducts()
       setProducts(data.products || [])
       setFilteredProducts(data.products || [])
     } catch (error) {
@@ -45,15 +45,13 @@ const MyProducts = () => {
   const filterProducts = () => {
     let filtered = products
 
-    // Filter by search query
     if (debouncedSearch) {
       filtered = filtered.filter((product) =>
-        product.variety.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        product.location.toLowerCase().includes(debouncedSearch.toLowerCase())
+        product.variety?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        product.location?.toLowerCase().includes(debouncedSearch.toLowerCase())
       )
     }
 
-    // Filter by status
     if (filterStatus !== 'all') {
       filtered = filtered.filter((product) => product.status === filterStatus)
     }
@@ -69,12 +67,7 @@ const MyProducts = () => {
       setDeleteModal({ isOpen: false, productId: null })
     } catch (error) {
       toast.error('Failed to delete product')
-      console.error(error)
     }
-  }
-
-  const openDeleteModal = (productId) => {
-    setDeleteModal({ isOpen: true, productId })
   }
 
   if (loading) {
@@ -87,9 +80,7 @@ const MyProducts = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="section-header">My Products</h1>
-          <p className="text-neutral-600">
-            Manage your rice product listings
-          </p>
+          <p className="text-neutral-600">Manage your rice product listings</p>
         </div>
         <Link to="/farmer/products/add">
           <Button variant="primary" leftIcon={<IoAdd />} className="mt-4 sm:mt-0">
@@ -108,82 +99,66 @@ const MyProducts = () => {
             placeholder="Search products..."
           />
         </div>
-        <div className="flex gap-2">
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="input"
-          >
-            <option value="all">All Status</option>
-            <option value="available">Available</option>
-            <option value="out_of_stock">Out of Stock</option>
-            <option value="sold">Sold</option>
-          </select>
-        </div>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          style={{ padding: '10px 14px', border: '1.5px solid #e5e5e5', borderRadius: '10px', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none', background: 'white', color: '#171717', cursor: 'pointer' }}
+        >
+          <option value="all">All Status</option>
+          <option value="available">Available</option>
+          <option value="out_of_stock">Out of Stock</option>
+          <option value="sold">Sold</option>
+        </select>
       </div>
 
-      {/* Products Count */}
-      <div className="mb-6">
-        <p className="text-sm text-neutral-600">
-          Showing {filteredProducts.length} of {products.length} products
-        </p>
-      </div>
+      {/* Count */}
+      <p style={{ fontSize: '0.85rem', color: '#a3a3a3', marginBottom: '20px' }}>
+        Showing {filteredProducts.length} of {products.length} products
+      </p>
 
-      {/* Products Grid */}
+      {/* Grid */}
       {filteredProducts.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="text-6xl mb-4">🌾</div>
-          <h3 className="text-xl font-semibold text-neutral-900 mb-2">
+        <div style={{ textAlign: 'center', padding: '64px 20px' }}>
+          <div style={{ fontSize: '4rem', marginBottom: '16px' }}>🌾</div>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#171717', marginBottom: '8px' }}>
             {searchQuery || filterStatus !== 'all' ? 'No products found' : 'No products yet'}
           </h3>
-          <p className="text-neutral-600 mb-6">
+          <p style={{ color: '#737373', marginBottom: '20px', fontSize: '0.9rem' }}>
             {searchQuery || filterStatus !== 'all'
               ? 'Try adjusting your filters'
               : 'Start by adding your first product listing'}
           </p>
           {!searchQuery && filterStatus === 'all' && (
             <Link to="/farmer/products/add">
-              <Button variant="primary" leftIcon={<IoAdd />}>
-                Add Your First Product
-              </Button>
+              <Button variant="primary" leftIcon={<IoAdd />}>Add Your First Product</Button>
             </Link>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
           {filteredProducts.map((product) => (
             <ProductCard
               key={product._id}
               product={product}
-              onEdit={(id) => window.location.href = `/farmer/products/edit/${id}`}
-              onDelete={openDeleteModal}
+              onDelete={(id) => setDeleteModal({ isOpen: true, productId: id })}
             />
           ))}
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       <Modal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, productId: null })}
         title="Delete Product"
         footer={
-          <div className="flex gap-3 justify-end">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteModal({ isOpen: false, productId: null })}
-            >
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={handleDelete}>
-              Delete
-            </Button>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+            <Button variant="outline" onClick={() => setDeleteModal({ isOpen: false, productId: null })}>Cancel</Button>
+            <Button variant="danger" onClick={handleDelete}>Delete</Button>
           </div>
         }
       >
-        <p className="text-neutral-700">
-          Are you sure you want to delete this product? This action cannot be undone.
-        </p>
+        <p style={{ color: '#525252' }}>Are you sure you want to delete this product? This action cannot be undone.</p>
       </Modal>
     </div>
   )
