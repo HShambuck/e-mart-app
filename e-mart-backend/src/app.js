@@ -44,6 +44,13 @@ app.get('/health', (req, res) =>
   res.json({ status: 'ok', env: process.env.NODE_ENV, timestamp: new Date().toISOString() })
 )
 
+app.get('/debug-cloudinary', (req, res) => {
+  res.json({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    secret_length: process.env.CLOUDINARY_API_SECRET?.length,
+  })
+})
+
 // Routes
 app.use('/api', routes)
 
