@@ -29,7 +29,7 @@ const OrderForm = ({ product, quantity, onSuccess, onCancel }) => {
 
     try {
       setLoading(true)
-      await orderService.createOrder({
+      await orderService.placeOrder({
         product: product._id,
         quantity,
         pricePerBag: product.pricePerBag,
